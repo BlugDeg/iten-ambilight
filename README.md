@@ -1,10 +1,38 @@
+<p align="center"><img src="docs/icon.png" width="128" alt="Programmsymbol"></p>
+
 # IT-EN Ambilight
 
 Eigenes Ambilight für den PC: ESP32-S3 + WS2812B, Steuerung per USB.
+Die LEDs hinter dem Monitor folgen dem Bild, zeigen Effekte oder eine feste Farbe.
+
+**Download:** die neueste `ItenAmbilight.exe` unter [Releases](https://github.com/BlugDeg/iten-ambilight/releases/latest).
+
+## Vorschau
+
+| Start | Start mit ausgeklappter Vorschau |
+|---|---|
+| ![Startseite mit den Betriebsarten](docs/screenshots/start.png) | ![Startseite mit ausgeklappter Vorschau des aufgenommenen Bildes](docs/screenshots/vorschau.png) |
+
+| Effekte | Eigene Effekte |
+|---|---|
+| ![Effekt-Übersicht mit Reglern](docs/screenshots/effekte.png) | ![Lua-Editor mit Baukasten](docs/screenshots/eigene-effekte.png) |
+
+| Regeln pro Programm | Gerät |
+|---|---|
+| ![Regeln pro Programm](docs/screenshots/regeln.png) | ![Geräte-Seite mit Taster, Temperatur und Verlauf](docs/screenshots/geraet.png) |
+
+| LED-Hardware | Ambilight |
+|---|---|
+| ![LED-Anzahl pro Seite](docs/screenshots/led-hardware.png) | ![Ambilight-Einstellungen mit Farbabgleich](docs/screenshots/ambilight.png) |
+
+| Kalibrier-Assistent |
+|---|
+| ![Kalibrier-Assistent im Vollbild](docs/screenshots/kalibrierung.png) |
 
 ## Inhalt
 - `src/ItenAmbilight` – Windows-Programm (C#, .NET 8, WPF)
-- `firmware/ambilight_v4_0` – aktuelle Firmware fürs ESP32-S3 (FastLED, Adalight, LED-Anzahl variabel bis 300)
+- `firmware/ambilight_v5_0` – aktuelle Firmware fürs ESP32-S3 (Taster-Meldungen, Temperatur, Fernbedienung)
+- `firmware/ambilight_v4_0` – Vorgänger (FastLED, Adalight, LED-Anzahl variabel bis 300)
 - `firmware/ambilight_v3_1` – ältere Firmware (fest 112 LEDs)
 - `firmware/diagnose` – Testprogramm (Strip rot/grün/blau, Taster, Statusmeldungen)
 

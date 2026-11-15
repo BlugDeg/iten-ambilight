@@ -1,0 +1,9 @@
+Hier gehören die Vorschaubilder für die README hin (PNG, genau diese Namen):
+
+start.png            Seite Start
+effekte.png          Seite Effekte
+eigene-effekte.png   Seite Eigene Effekte
+regeln.png           Seite Regeln
+ambilight.png        Seite Ambilight, Vorschau ausgeklappt
+geraet.png           Seite Gerät
+kalibrierung.png     Kalibrier-Assistent (ein Farbschritt)
