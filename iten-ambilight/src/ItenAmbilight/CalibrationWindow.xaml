@@ -1,0 +1,33 @@
+<Window x:Class="ItenAmbilight.CalibrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Kalibrierung" WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True"
+        WindowStartupLocation="Manual" Background="Black" Foreground="{StaticResource TextBrush}"
+        FontFamily="Segoe UI" FontSize="14" UseLayoutRounding="True">
+    <Grid>
+        <!-- Testbild: Ball, Balken, Ecken -->
+        <Canvas x:Name="Stage" ClipToBounds="True"/>
+
+        <!-- Frage und Regler -->
+        <Border x:Name="QuestionPanel" Width="700" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#12151D"
+                BorderBrush="{StaticResource LineBrush}" BorderThickness="1" CornerRadius="18" Padding="28">
+            <StackPanel>
+                <DockPanel>
+                    <TextBlock x:Name="ProfileText" DockPanel.Dock="Right" Foreground="{StaticResource MutedBrush}" FontFamily="Consolas" FontSize="13"/>
+                    <TextBlock x:Name="StepText" Foreground="{StaticResource MutedBrush}" FontSize="13"/>
+                </DockPanel>
+                <TextBlock x:Name="TitleText" FontSize="26" FontWeight="Bold" TextWrapping="Wrap" Margin="0,14,0,0"/>
+                <TextBlock x:Name="BodyText" FontSize="15" TextWrapping="Wrap" Foreground="{StaticResource TextDimBrush}" Margin="0,12,0,0" LineHeight="22"/>
+                <StackPanel x:Name="ControlsPanel" Margin="0,16,0,0"/>
+                <WrapPanel x:Name="ButtonsPanel" Margin="0,16,0,0"/>
+                <TextBlock x:Name="HintText" Style="{StaticResource Muted}" FontSize="13" Margin="0,12,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Fortschritt -->
+        <StackPanel x:Name="StepsPanel" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,34"/>
+        <TextBlock x:Name="ShowHint" Text="Klick oder Leertaste überspringt" Foreground="#98A1B5" FontSize="13" Visibility="Collapsed"
+                   HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,34"/>
+        <Button x:Name="CancelButton" Content="Abbrechen (Esc)" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="28" MinHeight="40"/>
+    </Grid>
+</Window>
