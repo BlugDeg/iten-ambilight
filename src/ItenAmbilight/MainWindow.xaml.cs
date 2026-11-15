@@ -186,6 +186,8 @@ namespace ItenAmbilight
 
             _timer.Interval = TimeSpan.FromMilliseconds(100);
             _timer.Tick += (_, _) => { UpdateStatus(); UpdatePreview(); UpdateEditorPreview(); };
+            IsVisibleChanged += (_, _) => _usage.Active = IsVisible;
+            _usage.Active = true;
             _timer.Start();
         }
 

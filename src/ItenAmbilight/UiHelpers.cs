@@ -21,6 +21,13 @@ namespace ItenAmbilight
         private DateTime _lastTime;
         private int _busy;
         private bool _gpuBroken;
+        private int _tick;
+
+        /// <summary>
+        /// Nur messen, solange das Fenster sichtbar ist. Die Abfrage der Grafikkarten-Zähler liest jedes Mal
+        /// die Daten aller Programme und belegt dabei viel Arbeitsspeicher – im Infobereich wäre das Verschwendung.
+        /// </summary>
+        public volatile bool Active;
 
         public double CpuPercent { get; private set; }
         public double RamMb { get; private set; }
@@ -34,6 +41,7 @@ namespace ItenAmbilight
 
         private void Sample()
         {
+            if (!Active) return;
             if (System.Threading.Interlocked.Exchange(ref _busy, 1) == 1) return;
             try
             {
@@ -48,7 +56,7 @@ namespace ItenAmbilight
                 _lastCpu = cpu;
                 _lastTime = now;
                 RamMb = _process.WorkingSet64 / 1048576.0;
-                GpuPercent = ReadGpu();
+                if (_tick++ % 3 == 0) GpuPercent = ReadGpu();      // Grafikkarte nur alle 6 Sekunden (teure Abfrage)
             }
             catch { }
             finally { System.Threading.Interlocked.Exchange(ref _busy, 0); }

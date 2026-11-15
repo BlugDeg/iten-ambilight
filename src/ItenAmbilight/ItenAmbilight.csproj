@@ -10,13 +10,21 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>ItenAmbilight</AssemblyName>
     <RootNamespace>ItenAmbilight</RootNamespace>
-    <Version>0.7.0</Version>
+    <Version>0.7.1</Version>
+    <!-- Speicher: kein zusätzlicher Hintergrund-Aufräumer, Speicher eher zurückgeben als behalten -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>false</TieredPGO>
     <!-- Programmsymbol: app.ico in diesen Ordner legen (wird automatisch verwendet, sobald die Datei da ist) -->
     <ApplicationIcon Condition="Exists('app.ico')">app.ico</ApplicationIcon>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="6" />
+    <RuntimeHostConfigurationOption Include="System.GC.RetainVM" Value="false" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="MoonSharp" Version="2.0.0" />

@@ -191,8 +191,15 @@ namespace ItenAmbilight
             }
         }
 
+        // Windows-Zeitgeber: ohne das dauert Thread.Sleep(1) bis zu 15.6 ms -> die Bildrate halbiert sich bei ruhigem Bild
+        [System.Runtime.InteropServices.DllImport("winmm.dll")] private static extern uint timeBeginPeriod(uint ms);
+        [System.Runtime.InteropServices.DllImport("winmm.dll")] private static extern uint timeEndPeriod(uint ms);
+
         private void Loop()
         {
+            try { timeBeginPeriod(1); } catch { }
+            List<LedRegion> layout = new List<LedRegion>();
+            string layoutKey = "";
             IScreenSource? capture = null;
             string captureKey = "";
             string captureNote = "";
@@ -346,8 +353,11 @@ namespace ItenAmbilight
                     }
 
                     // ---------- LED-Farben aus dem Bild ----------
+                    // Messbereiche nur neu berechnen, wenn sich die Anordnung ändert (nicht bei jedem Bild)
                     double aspect = (double)b.Width / Math.Max(1, b.Height);
-                    List<LedRegion> regions = LedLayout.Build(s, aspect);
+                    string wantedLayout = s.LedsTop + "|" + s.LedsRight + "|" + s.LedsBottom + "|" + s.LedsLeft + "|" + s.Start + "|" + s.Clockwise + "|" + s.SampleDepth + "|" + aspect;
+                    if (wantedLayout != layoutKey) { layout = LedLayout.Build(s, aspect); layoutKey = wantedLayout; }
+                    List<LedRegion> regions = layout;
 
                     int W = capture.Width, H = capture.Height;
                     double cl = Math.Clamp(s.CropLeft, 0, 45) / 100.0, cr = Math.Clamp(s.CropRight, 0, 45) / 100.0;
@@ -501,7 +511,11 @@ namespace ItenAmbilight
                 Status = ok ? "läuft (" + device.PortName + ", " + sourceName + ")" : "kein Gerät: " + device.LastError;
                 if (ok && ambilight && captureNote.Length > 0) Status += "  –  " + captureNote;
                 if (ok) Status += ruleNote;
-                lock (_lock) _lastColors = (byte[])outBuf.Clone();
+                lock (_lock)
+                {
+                    if (_lastColors.Length != outBuf.Length) _lastColors = new byte[outBuf.Length];
+                    Buffer.BlockCopy(outBuf, 0, _lastColors, 0, outBuf.Length);
+                }
 
                 // ---------- FPS + Takt ----------
                 frames++;
@@ -512,11 +526,13 @@ namespace ItenAmbilight
                     frames = 0;
                     fpsStart = nowMs;
                 }
+                // Rest des Bildtakts abwarten. Die Aufnahme hat bei ruhigem Bild schon gewartet -> dann bleibt hier nichts übrig.
                 int wait = frameMs - (int)(sw.ElapsedMilliseconds - frameStart);
-                if (wait > 0) Thread.Sleep(wait);
+                if (wait > 1) Thread.Sleep(wait);
             }
 
             capture?.Dispose();
+            try { timeEndPeriod(1); } catch { }
 
             // Beim Beenden LEDs ausschalten
             try
