@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows;
+using Microsoft.Win32;
 
 namespace ItenAmbilight
 {
@@ -14,9 +16,38 @@ namespace ItenAmbilight
         public AmbilightEngine Engine { get; private set; } = null!;
         public bool IsQuitting { get; private set; }
 
+        private SingleInstance? _single;
+        private SystemHooks? _hooks;
+        private volatile bool _locked, _displayOff, _suspended;
+
+        /// <summary>Tastenkürzel und Systemmeldungen; null, solange das Programm startet.</summary>
+        public SystemHooks? Hooks => _hooks;
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
+
+            // ---------- Befehle von der Kommandozeile (Stream Deck, Verknüpfungen) ----------
+            List<string> commands = AppCommands.ParseArgs(e.Args, out bool trayOnly, out string? argError);
+            if (argError != null)
+            {
+                MessageBox.Show("Unbekanntes Startargument: " + argError + "\n\nMöglich sind:\n\n" + AppCommands.Help,
+                                "IT-EN Ambilight");
+                Shutdown();
+                return;
+            }
+
+            // ---------- Nur einmal laufen ----------
+            _single = new SingleInstance();
+            if (!_single.TryAcquire(0))
+            {
+                // Läuft schon: Befehle weitergeben; ohne Befehl das Fenster des laufenden Programms zeigen.
+                if (commands.Count == 0 && !trayOnly) commands.Add("show");
+                if (commands.Count == 0 || SingleInstance.Send(commands, 2000)) { Shutdown(); return; }
+                // Keine Antwort (das andere Programm wird z. B. gerade beendet): kurz warten, dann selbst starten.
+                if (!_single.TryAcquire(5000)) { Shutdown(); return; }
+            }
+            if (commands.Count == 1 && commands[0] == "quit") { _single.Dispose(); Shutdown(); return; }   // es lief gar nicht
 
             Settings = AppSettings.Load();
             Engine = new AmbilightEngine(Settings);
@@ -38,11 +69,79 @@ namespace ItenAmbilight
             _tray.DoubleClick += (_, _) => ShowWindow();
             UpdateTray();
 
-            // "--tray" = ohne Fenster starten (für Autostart)
-            bool trayOnly = Array.Exists(e.Args, a => a.Equals("--tray", StringComparison.OrdinalIgnoreCase));
-            if (!trayOnly) ShowWindow();
+            // ---------- Tastenkürzel, Bildschirm ein/aus, Sperren, Ruhezustand ----------
+            _hooks = new SystemHooks();
+            _hooks.Pressed += RunCommand;
+            _hooks.DisplayChanged += on => { _displayOff = !on; UpdateSystemState(); };
+            _hooks.SetHotkeys(Settings.Hotkeys);
+            SystemEvents.SessionSwitch += OnSessionSwitch;
+            SystemEvents.PowerModeChanged += OnPowerModeChanged;
+
+            // Weitere Programmstarts geben ihre Befehle hierher
+            _single.Listen(line => Dispatcher.BeginInvoke(new Action(() => RunCommand(line))));
+
+            // "--tray" = ohne Fenster starten (für Autostart). Ein Start mit Befehl (z. B. --toggle) öffnet auch kein Fenster.
+            bool wantsWindow = commands.Remove("show");
+            foreach (string command in commands) RunCommand(command);
+            if (wantsWindow || (!trayOnly && commands.Count == 0)) ShowWindow();
 
             if (Settings.CheckUpdates) _ = CheckForUpdateAsync(silent: true);
+        }
+
+        // ---------------------------------------------------------------- Befehle, Tastenkürzel, Szenen
+        /// <summary>Führt einen Befehl aus (Tastenkürzel, Kommandozeile, zweiter Programmstart). Siehe AppCommands.</summary>
+        public void RunCommand(string command)
+        {
+            if (IsQuitting) return;
+            switch (AppCommands.Apply(Settings, command, out string text))
+            {
+                case CommandResult.Show: ShowWindow(); break;
+                case CommandResult.Quit: Quit(); break;
+                case CommandResult.Changed:
+                    ApplySettings(save: true);
+                    _window?.LoadFromSettings();
+                    Engine.AddLog("Befehl", text);
+                    break;
+                default:
+                    Engine.AddLog("Befehl", "Unbekannter Befehl: " + command);
+                    break;
+            }
+        }
+
+        /// <summary>Tastenkürzel aus den Einstellungen neu anmelden. Liefert die Aktionen, die Windows abgelehnt hat.</summary>
+        public List<string> ApplyHotkeys()
+        {
+            if (_hooks == null) return new List<string>();
+            _hooks.SetHotkeys(Settings.Hotkeys);
+            return new List<string>(_hooks.Failed);
+        }
+
+        private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+        {
+            if (e.Reason == SessionSwitchReason.SessionLock) _locked = true;
+            else if (e.Reason == SessionSwitchReason.SessionUnlock || e.Reason == SessionSwitchReason.SessionLogon) _locked = false;
+            UpdateSystemState();
+        }
+
+        private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
+        {
+            if (e.Mode == PowerModes.Suspend)
+            {
+                _suspended = true;
+                UpdateSystemState();
+                try { Engine.PrepareSleep(); } catch { }      // Szene «Ruhezustand» noch senden, bevor der PC schläft
+            }
+            else if (e.Mode == PowerModes.Resume)
+            {
+                _suspended = false;
+                Engine.Resume();
+                UpdateSystemState();
+            }
+        }
+
+        private void UpdateSystemState()
+        {
+            Engine.SystemState = _suspended || _displayOff ? 2 : _locked ? 1 : 0;
         }
 
         /// <summary>Symbol der eigenen .exe (app.ico); gibt es keines, das Standardsymbol von Windows.</summary>
@@ -139,8 +238,11 @@ namespace ItenAmbilight
         {
             IsQuitting = true;
             try { Settings.Save(); } catch { }
+            try { SystemEvents.SessionSwitch -= OnSessionSwitch; SystemEvents.PowerModeChanged -= OnPowerModeChanged; } catch { }
+            try { _hooks?.Dispose(); } catch { }
             Engine.Dispose();                      // schaltet die LEDs aus
             if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
+            _single?.Dispose();
             Shutdown();
         }
     }

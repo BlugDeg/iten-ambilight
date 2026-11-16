@@ -10,7 +10,7 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyName>ItenAmbilight</AssemblyName>
     <RootNamespace>ItenAmbilight</RootNamespace>
-    <Version>0.7.1</Version>
+    <Version>0.8.0</Version>
     <!-- Speicher: kein zusätzlicher Hintergrund-Aufräumer, Speicher eher zurückgeben als behalten -->
     <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
     <TieredPGO>false</TieredPGO>

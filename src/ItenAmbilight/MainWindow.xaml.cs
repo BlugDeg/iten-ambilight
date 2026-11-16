@@ -40,6 +40,7 @@ namespace ItenAmbilight
             FillEffects();
             FillRuleProcesses();
             FillCustomEffects("");
+            InitAutomation();
             LoadFromSettings();
             RuleEffectBox.SelectedIndex = 0;
             UpdateSwatch(RuleColorBox, RuleColorSwatch);
@@ -56,6 +57,8 @@ namespace ItenAmbilight
             NavHardware.Checked += (_, _) => ShowPage(PageHardware, "LED-Hardware");
             NavAmbilight.Checked += (_, _) => ShowPage(PageAmbilight, "Ambilight");
             NavGeneral.Checked += (_, _) => ShowPage(PageGeneral, "Allgemein");
+            NavAuto.Checked += (_, _) => ShowPage(PageAuto, "Automatik");
+            NavControl.Checked += (_, _) => ShowPage(PageControl, "Steuerung");
             GotoEffectsButton.Click += (_, _) => NavEffects.IsChecked = true;
 
             PreviewToggle.Checked += (_, _) => SetPreview(true);
@@ -203,6 +206,7 @@ namespace ItenAmbilight
             if (_app.IsQuitting) { _usage.Dispose(); return; }   // Programm wird beendet -> wirklich schliessen
             e.Cancel = true;
             TestBox.SelectedIndex = 0;            // Testfarbe beenden
+            _app.Hooks?.Suspend(false);           // falls gerade ein Tastenkürzel-Feld aktiv war
             _app.ApplySettings(save: true);
             Hide();
         }
@@ -210,7 +214,7 @@ namespace ItenAmbilight
         // ---------------------------------------------------------------- Seiten und Vorschau
         private void ShowPage(FrameworkElement page, string title)
         {
-            foreach (FrameworkElement p in new FrameworkElement[] { PageStart, PageEffects, PageEditor, PageRules, PageDevice, PageHardware, PageAmbilight, PageGeneral })
+            foreach (FrameworkElement p in new FrameworkElement[] { PageStart, PageEffects, PageEditor, PageRules, PageDevice, PageHardware, PageAmbilight, PageGeneral, PageAuto, PageControl })
                 p.Visibility = ReferenceEquals(p, page) ? Visibility.Visible : Visibility.Collapsed;
             PageTitle.Text = title;
         }
@@ -313,6 +317,7 @@ namespace ItenAmbilight
             foreach (EffectItem e in _allEffects)
                 RuleEffectBox.Items.Add(new ComboBoxItem { Content = e.Title + "  ·  " + e.Category, Tag = e.Id });
             SelectByTag(RuleEffectBox, ruleEffect);
+            FillSceneEffects();
             ShowEffectList();
         }
 
@@ -732,6 +737,7 @@ namespace ItenAmbilight
             PaperWhiteSlider.Value = s.HdrPaperWhite;
             SelectByTag(PortBox, s.Port);
             SelectByTag(CaptureBox, s.CaptureMethod);
+            LoadAutomation();
 
             _loading = false;
             UpdateInfo();

@@ -49,6 +49,34 @@ namespace ItenAmbilight
         /// </summary>
         public volatile int Calibration;
 
+        /// <summary>
+        /// Zustand des PCs für die Szenen: 0 = normal, 1 = gesperrt, 2 = Ruhezustand oder Bildschirm aus.
+        /// Wird vom Programm (App) gesetzt.
+        /// </summary>
+        public volatile int SystemState;
+
+        private volatile bool _holdRequest, _held;
+        private readonly ManualResetEventSlim _holdDone = new ManualResetEventSlim(false);
+
+        /// <summary>
+        /// Der PC geht gleich schlafen: Szene «Ruhezustand» einmal senden und dem Gerät sagen, dass es dieses Bild
+        /// halten soll (Firmware ab v5.1). Wartet höchstens kurz, damit Windows nicht aufgehalten wird.
+        /// </summary>
+        public void PrepareSleep()
+        {
+            if (_thread == null) return;
+            _holdDone.Reset();
+            _holdRequest = true;
+            _holdDone.Wait(800);
+        }
+
+        /// <summary>Der PC ist wieder wach: normal weitermachen.</summary>
+        public void Resume()
+        {
+            _holdRequest = false;
+            _held = false;
+        }
+
         // --- Meldungen und Befehle der Firmware (ab v5.0) ---
         private readonly ConcurrentQueue<string> _commands = new ConcurrentQueue<string>();
         private readonly List<LogEntry> _log = new List<LogEntry>();
@@ -223,12 +251,30 @@ namespace ItenAmbilight
             AddLog("Programm", "Gestartet");
             long lastRuleCheck = -10000;
             AppRule? rule = null;
+            ScheduleEntry? plan = null;
+            string lastOverlay = "";
+            int heldLoops = 0;
 
             while (_run)
             {
                 long frameStart = sw.ElapsedMilliseconds;
                 AppSettings s;
                 lock (_lock) s = _settings;
+
+                // ---------- PC schläft: nichts senden, sonst würde das gehaltene Bild überschrieben ----------
+                if (_held)
+                {
+                    // Sicherheit: läuft das Programm 60 s weiter, ohne dass Windows "wieder wach" meldet, normal weitermachen.
+                    // (Im echten Ruhezustand steht dieser Thread still, der Zähler läuft also nicht.)
+                    if (++heldLoops > 1200) { _held = false; heldLoops = 0; continue; }
+                    Status = "Ruhezustand";
+                    Fps = 0;
+                    lastTicks = sw.ElapsedTicks;
+                    Thread.Sleep(50);
+                    continue;
+                }
+
+                heldLoops = 0;
 
                 int n = s.TotalLeds;
                 if (n <= 0 || n > 300) { Status = "LED-Anzahl muss zwischen 1 und 300 liegen"; Thread.Sleep(200); continue; }
@@ -270,6 +316,7 @@ namespace ItenAmbilight
                                                                               StringComparison.OrdinalIgnoreCase));
                     }
                     ActiveRule = rule != null ? ForegroundApp.Normalize(rule.Process) : "";
+                    plan = s.ScheduleEnabled ? Automation.FindSchedule(s.Schedule, DateTime.Now) : null;
                     if (ActiveRule != lastRuleName)
                     {
                         lastRuleName = ActiveRule;
@@ -283,6 +330,34 @@ namespace ItenAmbilight
                 string staticColor = rule != null ? rule.Color : s.StaticColor;
                 if (calibration != 0) mode = "ambilight";       // Assistent: immer der Bildschirm
                 string ruleNote = rule != null ? "  –  Regel «" + ActiveRule + "»: " + ModeTitle(mode, s.EffectTitle(effect)) : "";
+
+                // ---------- Szene (gesperrt / Ruhezustand) und Zeitplan gehen vor ----------
+                // Reihenfolge: Assistent > Szene > Zeitplan > Regel > Betriebsart. Ist das Programm ausgeschaltet, bleibt es aus.
+                bool holdNow = _holdRequest;
+                int system = calibration != 0 ? 0 : holdNow ? 2 : SystemState;
+                Scene? scene = system == 2 ? s.SceneSleep : system == 1 ? s.SceneLock : null;
+                int brightness = s.Brightness;
+                string overlay = "";
+                if (scene != null)
+                {
+                    mode = scene.Mode == "color" || scene.Mode == "effect" ? scene.Mode : "off";
+                    effect = scene.Effect;
+                    staticColor = scene.Color;
+                    brightness = scene.Brightness;
+                    overlay = "Szene «" + (system == 2 ? "Ruhezustand" : "Gesperrt") + "»: " + ModeTitle(mode, s.EffectTitle(effect));
+                }
+                else if (plan != null && calibration == 0)
+                {
+                    if (plan.Action == "brightness") brightness = plan.Brightness; else mode = "off";
+                    overlay = "Zeitplan " + plan.From + "–" + plan.To + ": "
+                              + (plan.Action == "brightness" ? "Helligkeit " + Math.Clamp(plan.Brightness, 0, 100) + " %" : "aus");
+                }
+                if (overlay.Length > 0) ruleNote = (scene != null ? "" : ruleNote) + "  –  " + overlay;
+                if (overlay != lastOverlay)
+                {
+                    lastOverlay = overlay;
+                    AddLog("Automatik", overlay.Length > 0 ? overlay : "Wieder normale Betriebsart");
+                }
 
                 // ---------- Ausgeschaltet: einmal schwarz senden, dann warten ----------
                 if ((!s.Enabled && calibration == 0) || mode == "off")
@@ -298,6 +373,7 @@ namespace ItenAmbilight
                         FirmwareId = device.FirmwareId;
                         lock (_lock) _lastColors = (byte[])outBuf.Clone();
                     }
+                    if (holdNow) { _holdRequest = false; _held = true; _holdDone.Set(); }   // schlafen mit dunklen LEDs
                     Status = "aus" + (s.Enabled ? ruleNote : "");
                     Fps = 0;
                     lastTicks = sw.ElapsedTicks;
@@ -450,9 +526,9 @@ namespace ItenAmbilight
                 // ---------- Glätten und kalibrieren ----------
                 // Glättung: 0 = sofort, 95 = sehr träge (Zeitkonstante bis ca. 0.5 s). Effekte: kurz und fest.
                 double tau = ambilight ? Math.Clamp(s.Smoothing, 0, 95) / 95.0 * 0.5 : 0.06;
-                if (calibration == 2) tau = 0;
+                if (calibration == 2 || holdNow) tau = 0;       // vor dem Ruhezustand: sofort das fertige Bild
                 double alpha = tau <= 0.001 ? 1.0 : 1.0 - Math.Exp(-dt / tau);
-                double bright = Math.Clamp(s.Brightness, 0, 100) / 100.0;
+                double bright = Math.Clamp(brightness, 0, 100) / 100.0;
 
                 // Farbabgleich: eigener Satz für HDR, sonst der für normales Bild
                 ColorProfile prof = (ambilight && IsHdr ? s.Hdr : s.Sdr) ?? new ColorProfile();
@@ -505,6 +581,12 @@ namespace ItenAmbilight
 
                 // ---------- Senden ----------
                 bool ok = device.Send(s.Port, outBuf, n);
+                if (holdNow)
+                {
+                    // Bild halten, bis wieder Daten kommen (Firmware ab v5.1; ältere blendet nach 5 s aus)
+                    if (ok) device.SendCommand("H");
+                    _holdRequest = false; _held = true; _holdDone.Set();
+                }
                 DeviceOk = ok;
                 PortName = device.PortName;
                 FirmwareId = device.FirmwareId;

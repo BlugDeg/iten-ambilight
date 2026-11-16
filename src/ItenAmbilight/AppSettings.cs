@@ -85,6 +85,17 @@ namespace ItenAmbilight
         public Dictionary<string, EffectParams> EffectSettings { get; set; } = new Dictionary<string, EffectParams>();
         public List<CustomEffect> CustomEffects { get; set; } = new List<CustomEffect>();
 
+        // --- Tastenkürzel: Aktion (siehe AppCommands.HotkeyActions) -> Tasten, z. B. "Ctrl+Alt+F9". Leer = nicht belegt. ---
+        public Dictionary<string, string> Hotkeys { get; set; } = new Dictionary<string, string>();
+
+        // --- Zeitplan (standardmässig aus) ---
+        public bool ScheduleEnabled { get; set; } = false;
+        public List<ScheduleEntry> Schedule { get; set; } = new List<ScheduleEntry>();
+
+        // --- Szenen: PC gesperrt / Ruhezustand oder Bildschirm aus (Standard: LEDs aus) ---
+        public Scene SceneLock { get; set; } = new Scene();
+        public Scene SceneSleep { get; set; } = new Scene();
+
         // --- Farbabgleich: getrennt für SDR und HDR ---
         public ColorProfile? Sdr { get; set; }
         public ColorProfile? Hdr { get; set; }
@@ -118,6 +129,11 @@ namespace ItenAmbilight
             Rules ??= new List<AppRule>();
             EffectSettings ??= new Dictionary<string, EffectParams>();
             CustomEffects ??= new List<CustomEffect>();
+            Hotkeys ??= new Dictionary<string, string>();
+            Schedule ??= new List<ScheduleEntry>();
+            Schedule.RemoveAll(e => e == null);
+            SceneLock ??= new Scene();
+            SceneSleep ??= new Scene();
             if (Effects.Find(Effect) == null && FindCustom(Effect) == null) Effect = "rainbow";
         }
 
